@@ -30,9 +30,10 @@ DomaSentrix aims to provide evidence-based assessments of:
 DomaSentrix is under active development.
 
 Version 0.1.0 establishes the project foundation,
-domain normalization, validation, CLI, REST API and initial DNS assessment.
+domain normalization, validation, CLI, REST API, and initial DNS and TLS
+assessments.
 
-TLS and HTTP assessment modules are planned for subsequent releases.
+HTTP assessment is planned for a subsequent release.
 
 ## Installation
 
@@ -106,6 +107,29 @@ for finding in result.findings:
     print(f"{finding.severity}: {finding.message}")
 ```
 
+Assess a domain's verified TLS certificate and connection:
+
+```bash
+domasentrix tls example.com
+domasentrix tls example.com --port 8443 --timeout 5
+```
+
+The TLS assessment verifies the server certificate and evaluates TLS 1.0,
+TLS 1.1, TLS 1.2, and TLS 1.3 protocol support. A protocol is reported as
+supported only when the connection successfully negotiates that exact
+version. An inconclusive result means the local TLS environment or network
+conditions prevented a reliable determination. It does not mean the server
+does not support that protocol.
+
+The assessment makes one initial verified connection and four independent
+protocol probes. Each connection call may try multiple addresses returned by
+DNS, and DNS resolution itself is not bounded by the socket timeout. The
+timeout applies to each socket connection, not to the total assessment.
+Protocol probes resolve the hostname independently, so DNS load balancing may
+cause them to reach different endpoints. A supported result confirms a
+verified handshake with the endpoint reached by that probe; it does not prove
+that every endpoint behind the domain supports that protocol.
+
 DNS assessment uses the system-configured resolver and gives each lookup a
 three-second timeout. It is available through the Python API and command-line
 interface. REST API integration is planned for a future release.
@@ -135,9 +159,9 @@ ruff format --check .
 
 DomaSentrix is intended for authorized security assessments.
 
-The initial release validates domain syntax and performs DNS lookups for the
-requested domain. It does not make HTTP requests, scan ports or exploit
-vulnerabilities.
+The assessment modules validate the domain and perform DNS lookups or a TLS
+connection to the requested domain (port 443 by default). They do not make
+HTTP requests, scan ports or exploit vulnerabilities.
 
 See [SECURITY.md](SECURITY.md).
 
