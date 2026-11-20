@@ -4,6 +4,7 @@ import typer
 
 from domasentrix import __version__
 from domasentrix.checks.dns import DNSAuditResult, audit_dns
+from domasentrix.checks.http import HTTPAuditResult, audit_http
 from domasentrix.checks.tls import TLSAuditResult, audit_tls
 from domasentrix.core.target import TargetValidationError, normalize_domain
 
@@ -67,6 +68,92 @@ def tls(
     _display_tls_result(result)
     if result.errors:
         raise typer.Exit(code=1)
+
+
+@app.command()
+def http(
+    domain: str = typer.Argument(..., help="Domain name to assess."),
+    http_port: int = typer.Option(80, min=1, max=65535, help="HTTP port."),
+    https_port: int = typer.Option(443, min=1, max=65535, help="HTTPS port."),
+    timeout: float = typer.Option(
+        5.0,
+        min=0.000001,
+        help="Timeout in seconds for each connection.",
+    ),
+    max_redirects: int = typer.Option(
+        5,
+        min=0,
+        max=10,
+        help="Maximum same-domain redirects to follow per request.",
+    ),
+) -> None:
+    """Assess HTTP-to-HTTPS behavior and security headers."""
+    try:
+        result = audit_http(
+            domain,
+            http_port=http_port,
+            https_port=https_port,
+            timeout=timeout,
+            max_redirects=max_redirects,
+        )
+    except TargetValidationError as exc:
+        typer.secho(f"Invalid target: {exc}", fg=typer.colors.RED)
+        raise typer.Exit(code=1) from exc
+    except ValueError as exc:
+        typer.secho(f"Invalid HTTP options: {exc}", fg=typer.colors.RED)
+        raise typer.Exit(code=1) from exc
+
+    _display_http_result(result)
+    if result.errors:
+        raise typer.Exit(code=1)
+
+
+def _display_http_result(result: HTTPAuditResult) -> None:
+    typer.echo(f"HTTP assessment for: {result.domain}")
+    typer.echo(
+        "HTTPS available: " + ("Yes" if result.https_available else "Not established")
+    )
+    redirect_status = (
+        "Yes"
+        if result.http_to_https_redirect is True
+        else "No"
+        if result.http_to_https_redirect is False
+        else "Not determined"
+    )
+    typer.echo(f"HTTP-to-HTTPS redirect: {redirect_status}")
+
+    for label, response in (
+        ("HTTP response", result.http_response),
+        ("HTTPS response", result.https_response),
+    ):
+        typer.echo(f"{label}:")
+        if response is None:
+            typer.echo("  Not established")
+            continue
+        typer.echo(f"  Status: {response.status_code}")
+        typer.echo(f"  Final URL: {response.url}")
+        typer.echo(f"  HTTP version: {response.http_version}")
+        typer.echo(f"  Redirects followed: {response.redirect_count}")
+        for header_name, values in response.headers.items():
+            typer.echo(f"  {header_name}: {', '.join(values)}")
+
+    typer.echo("Findings:")
+    if result.findings:
+        for finding in result.findings:
+            typer.echo(
+                f"  [{finding.severity.upper()}] {finding.code}: {finding.message}"
+            )
+            typer.echo(f"    Evidence: {finding.evidence}")
+            typer.echo(f"    Remediation: {finding.remediation}")
+    else:
+        typer.echo("  None")
+
+    typer.echo("HTTP errors:")
+    if result.errors:
+        for error_type, error in result.errors.items():
+            typer.echo(f"  {error_type}: {error}")
+    else:
+        typer.echo("  None")
 
 
 def _display_tls_result(result: TLSAuditResult) -> None:

@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from typer.testing import CliRunner
 
 from domasentrix.checks.dns import DNSAuditResult, DNSFinding
+from domasentrix.checks.http import HTTPAuditResult, HTTPFinding, HTTPResponseInfo
 from domasentrix.checks.tls import (
     TLSAuditResult,
     TLSCertificateInfo,
@@ -167,6 +168,87 @@ def test_tls_command_displays_verification_error_and_returns_nonzero(
 
 def test_tls_command_rejects_invalid_domain() -> None:
     result = runner.invoke(app, ["tls", "127.0.0.1"])
+
+    assert result.exit_code == 1
+    assert "IP addresses are not accepted" in result.output
+
+
+def test_http_command_displays_assessment_and_options(monkeypatch) -> None:
+    response = HTTPResponseInfo(
+        url="https://example.com/",
+        status_code=200,
+        http_version="HTTP/1.1",
+        redirect_count=1,
+        headers={"strict-transport-security": ("max-age=31536000",)},
+    )
+    monkeypatch.setattr(
+        "domasentrix.cli.audit_http",
+        lambda domain, **kwargs: HTTPAuditResult(
+            domain="example.com",
+            http_port=kwargs["http_port"],
+            https_port=kwargs["https_port"],
+            http_response=response,
+            https_response=response,
+            http_to_https_redirect=True,
+            https_available=True,
+            findings=[
+                HTTPFinding(
+                    code="HTTP_SERVER_DISCLOSURE",
+                    severity="low",
+                    message="Server identifies an implementation.",
+                    evidence="HTTPS: example-server/1.2",
+                    remediation="Remove unnecessary server identification.",
+                )
+            ],
+        ),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "http",
+            "example.com",
+            "--http-port",
+            "8080",
+            "--https-port",
+            "8443",
+            "--timeout",
+            "3",
+            "--max-redirects",
+            "4",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "HTTP assessment for: example.com" in result.output
+    assert "HTTPS available: Yes" in result.output
+    assert "HTTP-to-HTTPS redirect: Yes" in result.output
+    assert "Final URL: https://example.com/" in result.output
+    assert "strict-transport-security: max-age=31536000" in result.output
+    assert "[LOW] HTTP_SERVER_DISCLOSURE" in result.output
+    assert "HTTP errors:\n  None" in result.output
+
+
+def test_http_command_displays_errors_and_returns_nonzero(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "domasentrix.cli.audit_http",
+        lambda domain, **kwargs: HTTPAuditResult(
+            domain="example.com",
+            http_port=80,
+            https_port=443,
+            errors={"https_request": "timeout: timed out"},
+        ),
+    )
+
+    result = runner.invoke(app, ["http", "example.com"])
+
+    assert result.exit_code == 1
+    assert "HTTPS available: Not established" in result.output
+    assert "https_request: timeout: timed out" in result.output
+
+
+def test_http_command_rejects_invalid_domain() -> None:
+    result = runner.invoke(app, ["http", "127.0.0.1"])
 
     assert result.exit_code == 1
     assert "IP addresses are not accepted" in result.output

@@ -21,6 +21,7 @@ DomaSentrix aims to provide evidence-based assessments of:
 - Python 3.12+
 - FastAPI
 - Typer
+- HTTPX
 - Pydantic
 - pytest
 - Ruff
@@ -31,9 +32,7 @@ DomaSentrix is under active development.
 
 Version 0.1.0 establishes the project foundation,
 domain normalization, validation, CLI, REST API, and initial DNS and TLS
-assessments.
-
-HTTP assessment is planned for a subsequent release.
+assessments, with HTTP security assessment available through the CLI.
 
 ## Installation
 
@@ -61,6 +60,9 @@ Install dependencies:
 ```bash
 pip install -e ".[dev]"
 ```
+
+HTTP assessment uses HTTPX, which is installed as a runtime dependency with the
+project.
 
 ## Usage
 
@@ -130,6 +132,38 @@ cause them to reach different endpoints. A supported result confirms a
 verified handshake with the endpoint reached by that probe; it does not prove
 that every endpoint behind the domain supports that protocol.
 
+Assess HTTP security configuration:
+
+```bash
+domasentrix http example.com
+domasentrix http example.com --http-port 8080 --https-port 8443 --timeout 5
+```
+
+The HTTP assessment records HTTP and HTTPS response status, final URL, protocol,
+and selected headers. It checks same-domain HTTP-to-HTTPS redirects, redirect
+loops and limits, HTTPS availability, HSTS (on HTTPS responses only), CSP,
+content-type and framing protections, Referrer-Policy, Permissions-Policy, and
+potential Server/X-Powered-By disclosure. CSP `frame-ancestors` is recognized
+as an alternative to X-Frame-Options. Header findings are configuration
+observations, not proof of an exploitable vulnerability.
+
+Requests use GET without sending a request body. Responses are streamed and
+closed without consuming their bodies. Redirects are manually followed only
+when the scheme, normalized host, and port match the requested domain and
+configured ports; external, credentialed, and HTTPS-to-HTTP redirects are not
+followed. The redirect limit defaults to five per endpoint and can be set from
+zero to ten with `--max-redirects`. TLS verification remains enabled.
+
+Before each new TCP connection, DomaSentrix validates every resolved IPv4 and
+IPv6 address and rejects destinations that are not globally routable. It
+connects to a validated numeric address while retaining the domain name for the
+HTTP Host header, TLS SNI, and certificate hostname verification. A mixture of
+public and non-public DNS answers is rejected rather than partially used.
+
+The timeout is applied to individual HTTP client connection/read operations,
+not as a total assessment deadline. System DNS resolution may take longer than
+the configured timeout, and the HTTP and HTTPS checks run separately.
+
 DNS assessment uses the system-configured resolver and gives each lookup a
 three-second timeout. It is available through the Python API and command-line
 interface. REST API integration is planned for a future release.
@@ -159,9 +193,13 @@ ruff format --check .
 
 DomaSentrix is intended for authorized security assessments.
 
-The assessment modules validate the domain and perform DNS lookups or a TLS
-connection to the requested domain (port 443 by default). They do not make
-HTTP requests, scan ports or exploit vulnerabilities.
+The assessment modules validate the domain and perform DNS lookups, TLS checks,
+or HTTP GET requests to the requested domain and configured ports using the
+configured per-operation timeouts.
+HTTP redirects are scope-restricted, TLS certificate verification is enabled,
+and response bodies are not consumed. DomaSentrix is for authorized defensive
+assessments only; it does not scan ports, exploit vulnerabilities, brute-force,
+bypass authentication, submit forms, or modify remote resources.
 
 See [SECURITY.md](SECURITY.md).
 
