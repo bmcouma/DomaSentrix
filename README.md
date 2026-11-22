@@ -81,6 +81,38 @@ domasentrix dns example.com
 DNS findings do not make the command fail. A nonzero exit code indicates an
 invalid target or DNS lookup errors that may make the assessment incomplete.
 
+Run the combined DNS, TLS, and HTTP assessment:
+
+```bash
+domasentrix assess example.com
+```
+
+Text output is the default. To produce a versioned JSON report on stdout or
+save it to a new file:
+
+```bash
+domasentrix assess example.com --format json
+domasentrix assess example.com --format json --output report.json
+```
+
+For a self-contained HTML report with an executive summary and technical
+findings, provide an output file:
+
+```bash
+domasentrix assess example.com --format html --output report.html
+```
+
+HTML reports include no scripts or external assets, and report data is escaped
+before rendering. HTML output requires `--output`; like JSON file output, it
+refuses to overwrite an existing report.
+
+JSON reports include the normalized target, generation time, assessment
+completeness, score and category deductions when available, findings, and
+operational errors. Partial assessments use `null` for the overall score, risk,
+and total deduction. The `--output` option refuses to overwrite an existing
+file. Security findings alone do not cause a nonzero exit code; incomplete
+assessments or operational errors do.
+
 Display the version:
 
 ```bash

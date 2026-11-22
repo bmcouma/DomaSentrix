@@ -182,6 +182,17 @@ def test_audit_http_reports_missing_security_headers(
         "HTTP_PERMISSIONS_POLICY_MISSING",
     } <= codes
     assert all(finding.severity != "critical" for finding in result.findings)
+    findings = {finding.code: finding for finding in result.findings}
+    assert findings["HTTP_CSP_MISSING"].message == (
+        "The HTTPS response does not set Content-Security-Policy."
+    )
+    assert findings["HTTP_FRAME_PROTECTION_MISSING"].message == (
+        "Neither X-Frame-Options nor a restrictive CSP frame-ancestors "
+        "directive provides framing protection."
+    )
+    assert findings["HTTP_PERMISSIONS_POLICY_MISSING"].remediation == (
+        "Consider explicitly restricting browser features the site does not use."
+    )
 
 
 def test_audit_http_accepts_configured_security_headers_and_csp_frames(
